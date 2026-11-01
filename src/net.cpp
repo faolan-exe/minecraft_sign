@@ -29,10 +29,10 @@ uint32_t lastClientSeen = 0;
 bool retrying = false;
 
 void applyTxPower() {
-#ifdef WIFI_LOW_TX_POWER
+#ifdef WIFI_TX_POWER
   // Manche C3-Boards (z. B. SuperMini) haben eine schwache Antennenanpassung und
   // funktionieren mit voller Sendeleistung schlechter
-  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+  WiFi.setTxPower(WIFI_TX_POWER);
 #endif
 }
 
