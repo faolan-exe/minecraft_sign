@@ -15,6 +15,8 @@ Die LEDs sind buchstabenweise verkettet, innerhalb der Buchstaben aber nicht in 
 
 GPIO 20/21 sind die UART0-Pins. Die serielle Konsole läuft über USB-CDC, deshalb sind sie frei. Andere Pins: `-DLED_PIN=…` / `-DBUTTON_PIN=…` in `build_flags`.
 
+Manche C3-Boards (z. B. SuperMini) haben eine schwache Antenne und funken mit voller Leistung schlechter. Hilft das Setup-Netz oder die WLAN-Verbindung nicht, `-DWIFI_LOW_TX_POWER` in `build_flags` ergänzen (8,5 dBm).
+
 ## Erste Inbetriebnahme
 
 1. Flashen: `pio run -e esp32c3 -t upload`
