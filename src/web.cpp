@@ -99,6 +99,8 @@ void handleInfo(AsyncWebServerRequest* req) {
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
   doc["leds"] = NUM_LEDS;
+  doc["currentMa"] = app::estimatedMilliamps();
+  doc["calibration"] = app::calibrationMode();
   sendJson(req, doc);
 }
 
@@ -188,6 +190,7 @@ void begin() {
   server.on("/api/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   addCommandRoute("/api/state", app::CommandType::Light);
   addCommandRoute("/api/settings", app::CommandType::Settings);
+  addCommandRoute("/api/calibrate", app::CommandType::Calibrate);
   server.onNotFound(handleNotFound);
   server.begin();
 }

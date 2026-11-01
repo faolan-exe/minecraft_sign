@@ -3,6 +3,8 @@
 #include <ctype.h>
 #include <string.h>
 
+#include "layout.h"
+
 namespace {
 
 // Kopiert, wenn der Text passt; gibt true bei Änderung zurück
@@ -59,6 +61,35 @@ uint8_t applyJson(JsonVariantConst cmd, Settings& s) {
     v = v < MIN_MILLIAMPS ? MIN_MILLIAMPS : (v > MAX_MILLIAMPS ? MAX_MILLIAMPS : v);
     if (v != s.maxMilliamps) {
       s.maxMilliamps = static_cast<uint16_t>(v);
+      changed |= CHANGED_LIVE;
+    }
+  }
+
+  if (cmd["channelMicroamps"].is<long>()) {
+    long v = cmd["channelMicroamps"].as<long>();
+    v = v < MIN_CHANNEL_MICROAMPS ? MIN_CHANNEL_MICROAMPS : (v > MAX_CHANNEL_MICROAMPS ? MAX_CHANNEL_MICROAMPS : v);
+    if (v != s.power.channelMicroamps) {
+      s.power.channelMicroamps = static_cast<uint16_t>(v);
+      changed |= CHANGED_LIVE;
+    }
+  }
+  if (cmd["baseMilliamps"].is<long>()) {
+    long v = cmd["baseMilliamps"].as<long>();
+    v = v < 0 ? 0 : (v > MAX_BASE_MILLIAMPS ? MAX_BASE_MILLIAMPS : v);
+    if (v != s.power.baseMilliamps) {
+      s.power.baseMilliamps = static_cast<uint16_t>(v);
+      changed |= CHANGED_LIVE;
+    }
+  }
+  JsonVariantConst cal = cmd["calibration"];
+  if (cal["offMa"].is<long>() && cal["whiteMa"].is<long>()) {
+    const long off = cal["offMa"].as<long>();
+    const long white = cal["whiteMa"].as<long>();
+    PowerModel m;
+    if (off >= 0 && white >= 0 && white <= 65535 &&
+        power::calibrate(static_cast<uint16_t>(off), static_cast<uint16_t>(white), NUM_LEDS, m) &&
+        (m.channelMicroamps != s.power.channelMicroamps || m.baseMilliamps != s.power.baseMilliamps)) {
+      s.power = m;
       changed |= CHANGED_LIVE;
     }
   }
@@ -124,6 +155,8 @@ void toJson(const Settings& s, JsonObject out) {
   out["hostname"] = s.hostname;
   out["maxMilliamps"] = s.maxMilliamps;
   out["powerOn"] = powerOnName(s.powerOn);
+  out["channelMicroamps"] = s.power.channelMicroamps;
+  out["baseMilliamps"] = s.power.baseMilliamps;
   JsonObject wifi = out["wifi"].to<JsonObject>();
   wifi["ssid"] = s.wifiSsid;
   wifi["hasPass"] = s.wifiPass[0] != '\0';

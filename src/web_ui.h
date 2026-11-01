@@ -113,10 +113,22 @@ progress{width:100%}
     <div class="panel">
       <h2>Gerät</h2>
       <div class="row"><label for="hostname">Name</label><input type="text" id="hostname" pattern="[a-z0-9-]+"></div>
-      <div class="row"><label for="mA">Max. Strom (mA)</label><input type="number" id="mA" min="200" max="5000" step="100"></div>
       <div class="row"><label for="powerOn">Nach Stromausfall</label>
         <select id="powerOn"><option value="last">letzter Zustand</option><option value="on">immer an</option><option value="off">immer aus</option></select></div>
       <div class="row"><button class="primary" id="saveDevice">Speichern</button></div>
+    </div>
+    <div class="panel">
+      <h2>Strom</h2>
+      <p class="status">Geschätzt gerade: <b id="currentMa">–</b> mA</p>
+      <div class="row"><label for="mA">Limit (mA)</label><input type="number" id="mA" min="200" max="5000" step="100"></div>
+      <div class="row"><label for="chMa">Je Farbkanal (mA)</label><input type="number" id="chMa" min="0.5" max="30" step="0.01"></div>
+      <div class="row"><label for="baseMa">Grundlast (mA)</label><input type="number" id="baseMa" min="0" max="1000" step="1"></div>
+      <div class="row"><button class="primary" id="savePower">Speichern</button></div>
+      <h2 style="margin-top:16px">Kalibrieren mit dem Netzteil</h2>
+      <p class="status">Das Testbild läuft ohne Begrenzung und endet nach 3 min von selbst.</p>
+      <div class="row"><button id="calOff">1. Alle LEDs aus</button><input type="number" id="calOffMa" placeholder="gemessen mA" min="0"></div>
+      <div class="row"><button id="calWhite">2. Alle weiß (50 %)</button><input type="number" id="calWhiteMa" placeholder="gemessen mA" min="0"></div>
+      <div class="row"><button class="primary" id="calApply">Übernehmen</button><button id="calEnd">Testbild beenden</button></div>
     </div>
     <div class="panel">
       <h2>MQTT / Home Assistant</h2>
@@ -226,6 +238,7 @@ async function refresh() {
   try {
     if (Object.keys(pending).length === 0) { state = await api('state'); render(); }
     const info = await api('info');
+    $('currentMa').textContent = info.currentMa + (info.calibration ? ' (Testbild ' + (info.calibration === 'white' ? 'weiß' : 'aus') + ')' : '');
     $('status').textContent = info.setupMode && !info.wifi
       ? `Setup-Netz „${info.apSsid}“ · ${info.ip}`
       : `${info.hostname}.local · ${info.ip} · WLAN ${info.wifi} (${info.rssi} dBm) · MQTT ${info.mqtt ? 'verbunden' : 'aus'} · v${info.version}`;
@@ -241,6 +254,8 @@ async function loadSettings() {
   $('wpass').placeholder = s.wifi.hasPass ? 'unverändert' : 'kein Passwort';
   $('hostname').value = s.hostname;
   $('mA').value = s.maxMilliamps;
+  $('chMa').value = (s.channelMicroamps / 1000).toFixed(2);
+  $('baseMa').value = s.baseMilliamps;
   $('powerOn').value = s.powerOn;
   $('mqOn').checked = s.mqtt.enabled;
   $('mqHost').value = s.mqtt.host;
@@ -291,8 +306,26 @@ $('saveWifi').onclick = async () => {
   alert('Gespeichert. Das Schild startet neu und verbindet sich mit „' + wifi.ssid + '“.\nDanach erreichbar unter http://' + $('hostname').value + '.local');
 };
 $('saveDevice').onclick = async () => {
-  await api('settings', {hostname: $('hostname').value.trim().toLowerCase(), maxMilliamps: +$('mA').value, powerOn: $('powerOn').value});
+  await api('settings', {hostname: $('hostname').value.trim().toLowerCase(), powerOn: $('powerOn').value});
   setTimeout(loadSettings, 500);
+};
+$('savePower').onclick = async () => {
+  await api('settings', {maxMilliamps: +$('mA').value, channelMicroamps: Math.round(+$('chMa').value * 1000), baseMilliamps: +$('baseMa').value});
+  setTimeout(loadSettings, 500);
+};
+$('calOff').onclick = () => api('calibrate', {mode: 'off'});
+$('calWhite').onclick = () => api('calibrate', {mode: 'white'});
+$('calEnd').onclick = () => api('calibrate', {mode: 'end'});
+$('calApply').onclick = async () => {
+  const off = +$('calOffMa').value, white = +$('calWhiteMa').value;
+  if (!(white > off)) { alert('Bitte beide Messwerte eintragen (weiß muss größer als aus sein).'); return; }
+  await api('settings', {calibration: {offMa: off, whiteMa: white}});
+  await api('calibrate', {mode: 'end'});
+  setTimeout(async () => {
+    const before = $('chMa').value;
+    await loadSettings();
+    alert(`Übernommen: ${$('chMa').value} mA je Kanal, Grundlast ${$('baseMa').value} mA` + (before === $('chMa').value ? '\n(unverändert – Werte unplausibel?)' : ''));
+  }, 600);
 };
 $('saveMqtt').onclick = async () => {
   const mqtt = {enabled: $('mqOn').checked, host: $('mqHost').value.trim(), port: +$('mqPort').value,

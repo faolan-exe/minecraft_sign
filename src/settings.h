@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "light_state.h"
+#include "power.h"
 
 // Geräte-Einstellungen. Werden nur über die Weboberfläche gesetzt und im Flash
 // gespeichert; nichts davon steht im Code.
@@ -11,6 +12,9 @@
 struct Settings {
   char hostname[32] = "minecraft-sign";
   uint16_t maxMilliamps = 1800;
+  // Voreinstellung für 2020-WS2812: 5 mA je Kanal (Datenblatt WS2812C-2020, passt zur
+  // Messung ≤ 1 A bei vollem Regenbogen); Grundlast ist eine Annahme bis zur Kalibrierung
+  PowerModel power{5000, 100};
   PowerOnMode powerOn = PowerOnMode::Last;
 
   char wifiSsid[33] = "";
@@ -27,6 +31,9 @@ struct Settings {
 
 constexpr uint16_t MIN_MILLIAMPS = 200;
 constexpr uint16_t MAX_MILLIAMPS = 5000;
+constexpr uint16_t MIN_CHANNEL_MICROAMPS = 500;
+constexpr uint16_t MAX_CHANNEL_MICROAMPS = 30000;
+constexpr uint16_t MAX_BASE_MILLIAMPS = 1000;
 
 // Was sich geändert hat, damit der Aufrufer weiß, ob neu verbunden werden muss
 enum SettingsChange : uint8_t {
@@ -46,6 +53,8 @@ namespace settings {
 // - Hostname: nur a–z, 0–9 und '-', nicht am Anfang/Ende, wird kleingeschrieben;
 //   ungültige Namen werden ignoriert.
 // - Zu lange Texte werden ignoriert statt abgeschnitten.
+// - Strommodell: channelMicroamps 500–30000, baseMilliamps 0–1000 (begrenzt);
+//   calibration {offMa, whiteMa} setzt beides, unplausible Messungen werden ignoriert.
 uint8_t applyJson(JsonVariantConst cmd, Settings& s);
 
 // Ohne Passwörter, stattdessen hasPass-Felder
