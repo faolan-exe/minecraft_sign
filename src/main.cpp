@@ -9,6 +9,7 @@
 #include "layout.h"
 #include "mqtt.h"
 #include "net.h"
+#include "power.h"
 #include "storage.h"
 #include "web.h"
 
@@ -39,6 +40,13 @@ uint32_t saveAt = 0;
 uint32_t lastFrame = 0;
 uint32_t lastAutoCycle = 0;
 uint32_t rebootAt = 0;
+volatile uint32_t estimateMa = 0;
+
+// Messmodus für die Stromkalibrierung; endet von selbst nach CALIBRATION_TIMEOUT_MS
+enum class CalMode : uint8_t { None, Off, White };
+volatile CalMode calMode = CalMode::None;
+uint32_t calUntil = 0;
+constexpr uint32_t CALIBRATION_TIMEOUT_MS = 180000;
 
 // Zustand ändern: Version erhöhen, Speichern vormerken
 void stateChanged(bool saveNow) {
@@ -74,7 +82,6 @@ void handleCommand(const Command& cmd) {
       xSemaphoreGive(mutex);
       if (!changed) return;
       storage::saveSettings(cfg);
-      FastLED.setMaxPowerInVoltsAndMilliamps(5, cfg.maxMilliamps);
       // WLAN und Hostname brauchen einen sauberen Neustart
       if (changed & (CHANGED_WIFI | CHANGED_HOSTNAME)) rebootAt = millis() + 1500;
       break;
@@ -82,6 +89,14 @@ void handleCommand(const Command& cmd) {
     case app::CommandType::Reboot:
       rebootAt = millis() + 500;
       break;
+    case app::CommandType::Calibrate: {
+      JsonDocument doc;
+      if (deserializeJson(doc, cmd.json)) return;
+      const char* mode = doc["mode"] | "end";
+      calMode = strcmp(mode, "off") == 0 ? CalMode::Off : (strcmp(mode, "white") == 0 ? CalMode::White : CalMode::None);
+      calUntil = millis() + CALIBRATION_TIMEOUT_MS;
+      break;
+    }
     case app::CommandType::FactoryReset:
       storage::clearAll();
       rebootAt = millis() + 500;
@@ -151,7 +166,20 @@ void renderFrame(uint32_t now) {
   }
   xSemaphoreGive(mutex);
 
-  FastLED.setBrightness(state.brightness);
+  uint8_t brightness = state.brightness;
+  if (calMode != CalMode::None) {
+    // Testbild ohne Begrenzung, damit die Messung zum Modell passt
+    if (static_cast<int32_t>(now - calUntil) >= 0) calMode = CalMode::None;
+    const uint8_t v = calMode == CalMode::White ? CALIBRATION_LEVEL : 0;
+    fill_solid(out, NUM_LEDS, CRGB(v, v, v));
+    brightness = 255;
+  } else {
+    brightness = power::limitBrightness(reinterpret_cast<const uint8_t*>(out), NUM_LEDS, brightness,
+                                        cfg.maxMilliamps, cfg.power);
+  }
+  estimateMa = power::estimateMilliamps(reinterpret_cast<const uint8_t*>(out), NUM_LEDS, brightness, cfg.power);
+
+  FastLED.setBrightness(brightness);
   FastLED.show();
 }
 
@@ -196,6 +224,16 @@ uint32_t stateVersion() {
   return v;
 }
 
+uint32_t estimatedMilliamps() { return estimateMa; }
+
+const char* calibrationMode() {
+  switch (calMode) {
+    case CalMode::Off: return "off";
+    case CalMode::White: return "white";
+    default: return "";
+  }
+}
+
 uint32_t settingsVersion() {
   xSemaphoreTake(mutex, portMAX_DELAY);
   const uint32_t v = settingsVer;
@@ -221,8 +259,8 @@ void setup() {
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  FastLED.addLeds<WS2812B, LED_PIN, GRB>(out, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, cfg.maxMilliamps);
+  // Strombegrenzung übernimmt power.h, nicht FastLED (falsches Modell für 2020-LEDs)
+  FastLED.addLeds<WS2812B, LED_PIN, GRB>(out, NUM_LEDS).setCorrection(CRGB(CORRECTION_R, CORRECTION_G, CORRECTION_B));
   FastLED.clear(true);
 
   net::begin(cfg);

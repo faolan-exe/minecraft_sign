@@ -58,6 +58,11 @@ void loadSettings(Settings& s) {
   if (!settings::validHostname(s.hostname)) strcpy(s.hostname, Settings().hostname);
   s.maxMilliamps = p.getUShort("mA", s.maxMilliamps);
   if (s.maxMilliamps < MIN_MILLIAMPS || s.maxMilliamps > MAX_MILLIAMPS) s.maxMilliamps = Settings().maxMilliamps;
+  s.power.channelMicroamps = p.getUShort("chUA", s.power.channelMicroamps);
+  if (s.power.channelMicroamps < MIN_CHANNEL_MICROAMPS || s.power.channelMicroamps > MAX_CHANNEL_MICROAMPS)
+    s.power.channelMicroamps = Settings().power.channelMicroamps;
+  s.power.baseMilliamps = p.getUShort("baseMA", s.power.baseMilliamps);
+  if (s.power.baseMilliamps > MAX_BASE_MILLIAMPS) s.power.baseMilliamps = Settings().power.baseMilliamps;
   s.powerOn = static_cast<PowerOnMode>(p.getUChar("powerOn", static_cast<uint8_t>(s.powerOn)));
   if (static_cast<uint8_t>(s.powerOn) > 2) s.powerOn = PowerOnMode::Last;
   loadText(p, "ssid", s.wifiSsid);
@@ -77,6 +82,8 @@ void saveSettings(const Settings& s) {
   if (!p.begin(NS_SETTINGS, false)) return;
   p.putString("host", s.hostname);
   p.putUShort("mA", s.maxMilliamps);
+  p.putUShort("chUA", s.power.channelMicroamps);
+  p.putUShort("baseMA", s.power.baseMilliamps);
   p.putUChar("powerOn", static_cast<uint8_t>(s.powerOn));
   p.putString("ssid", s.wifiSsid);
   p.putString("pass", s.wifiPass);

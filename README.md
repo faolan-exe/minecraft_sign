@@ -9,13 +9,19 @@ Die LEDs sind buchstabenweise verkettet, innerhalb der Buchstaben aber nicht in 
 | | |
 |---|---|
 | Controller | ESP32-C3 (4 MB Flash, z. B. SuperMini) |
-| LEDs | 182 × WS2812B, Farbreihenfolge GRB, Daten an **GPIO 20** |
+| LEDs | 182 × WS2812 im 2020-SMD-Gehäuse (5-mm-Streifen), Farbreihenfolge GRB, Daten an **GPIO 20** |
 | Taster | gegen GND an **GPIO 21** (interner Pull-up) |
-| Versorgung | USB 5 V; Strom wird per Software begrenzt (Standard 1800 mA, einstellbar) |
+| Versorgung | USB 5 V; Strom wird per Software begrenzt (Standard 1800 mA, einstellbar, siehe unten) |
 
 GPIO 20/21 sind die UART0-Pins. Die serielle Konsole läuft über USB-CDC, deshalb sind sie frei. Andere Pins: `-DLED_PIN=…` / `-DBUTTON_PIN=…` in `build_flags`.
 
 Manche C3-Boards (z. B. SuperMini) haben eine schwache Antenne und funken mit voller Leistung schlechter. Deshalb ist die Sendeleistung in `platformio.ini` per `-DWIFI_TX_POWER=WIFI_POWER_11dBm` reduziert. Ist das Setup-Netz nicht sichtbar, auf `WIFI_POWER_8_5dBm` gehen; bei Boards mit guter Antenne kann der Eintrag für mehr Reichweite entfernt werden.
+
+## Strombegrenzung
+
+Die Firmware schätzt den Strom jedes Bilds und dimmt, wenn das Limit überschritten würde. Das Modell (Strom je Farbkanal, Grundlast) ist auf die kleinen 2020-LEDs eingestellt: 5 mA je Kanal und 100 mA Grundlast. Die Grundlast ist eine Annahme, bis kalibriert wurde. Die eingebaute Begrenzung von FastLED rechnet mit großen 5050-LEDs und würde viel zu früh dimmen; sie wird nicht genutzt.
+
+Kalibrieren unter *Einstellungen → Strom*: Schild am Labornetzteil betreiben, „Alle LEDs aus“ wählen und den Strom ablesen, dann „Alle weiß (50 %)“ wählen und wieder ablesen. Beide Werte eintragen und übernehmen. Der geschätzte Strom wird dort live angezeigt.
 
 ## Erste Inbetriebnahme
 
@@ -56,6 +62,7 @@ Jeder Effekt hat Geschwindigkeit und, je nach Effekt, Intensität sowie eine ode
 | GET/POST | `/api/settings` | Geräte-, WLAN- und MQTT-Einstellungen (ohne Passwörter) |
 | GET | `/api/scan` | WLAN-Suche |
 | POST | `/api/update` | Firmware hochladen (multipart) |
+| POST | `/api/calibrate` | Testbild für die Strommessung: `{"mode":"off"\|"white"\|"end"}` |
 | POST | `/api/reboot`, `/api/factory-reset` | |
 
 Beispiel:

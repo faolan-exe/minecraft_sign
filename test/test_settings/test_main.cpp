@@ -127,6 +127,29 @@ void test_json_output_hides_passwords() {
   TEST_ASSERT_TRUE(doc["mqtt"]["hasPass"].as<bool>());
 }
 
+void test_power_model_values_clamped() {
+  Settings s;
+  TEST_ASSERT_EQUAL_UINT16(5000, s.power.channelMicroamps);
+  apply(s, R"({"channelMicroamps":10,"baseMilliamps":-5})");
+  TEST_ASSERT_EQUAL_UINT16(MIN_CHANNEL_MICROAMPS, s.power.channelMicroamps);
+  TEST_ASSERT_EQUAL_UINT16(0, s.power.baseMilliamps);
+  apply(s, R"({"channelMicroamps":99999,"baseMilliamps":5000})");
+  TEST_ASSERT_EQUAL_UINT16(MAX_CHANNEL_MICROAMPS, s.power.channelMicroamps);
+  TEST_ASSERT_EQUAL_UINT16(MAX_BASE_MILLIAMPS, s.power.baseMilliamps);
+}
+
+void test_power_calibration() {
+  Settings s;
+  TEST_ASSERT_EQUAL_UINT8(CHANGED_LIVE, apply(s, R"({"calibration":{"offMa":70,"whiteMa":1000}})"));
+  TEST_ASSERT_EQUAL_UINT16(70, s.power.baseMilliamps);
+  const uint16_t ch = s.power.channelMicroamps;
+  // unplausibel: bleibt unverändert
+  TEST_ASSERT_EQUAL_UINT8(CHANGED_NONE, apply(s, R"({"calibration":{"offMa":900,"whiteMa":100}})"));
+  TEST_ASSERT_EQUAL_UINT8(CHANGED_NONE, apply(s, R"({"calibration":{"offMa":-1,"whiteMa":100}})"));
+  TEST_ASSERT_EQUAL_UINT8(CHANGED_NONE, apply(s, R"({"calibration":{"offMa":70}})"));
+  TEST_ASSERT_EQUAL_UINT16(ch, s.power.channelMicroamps);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_defaults_have_no_credentials);
@@ -140,5 +163,7 @@ int main() {
   RUN_TEST(test_power_on_mode);
   RUN_TEST(test_mqtt_settings);
   RUN_TEST(test_json_output_hides_passwords);
+  RUN_TEST(test_power_model_values_clamped);
+  RUN_TEST(test_power_calibration);
   return UNITY_END();
 }
