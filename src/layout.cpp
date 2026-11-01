@@ -16,6 +16,8 @@ uint8_t normX[NUM_LEDS];
 uint8_t normY[NUM_LEDS];
 float rad[NUM_LEDS];
 uint8_t ang[NUM_LEDS];
+uint8_t rank[NUM_LEDS];
+uint8_t order[NUM_LEDS];
 float totalWidth = 0;
 
 uint16_t count = 0;
@@ -148,6 +150,48 @@ void buildT() {
   endLetter();
 }
 
+// Schreibreihenfolge je Buchstabe als 0-basierte Kettenindizes (LED n aus layout.txt = n-1).
+// Buchstaben, deren Kette schon links beginnt (I, E, C, F), nutzen die Kettenreihenfolge.
+const uint8_t PEN_M[] = {25, 24, 23, 22, 21, 20, 19, 18, 17,  // 26–18 links hoch
+                         16, 15, 14, 13, 12, 11, 10, 9,       // 17–10 V
+                         8,  7,  6,  5,  4,  3,  2,  1,  0};  // 9–1 rechts runter
+const uint8_t PEN_N[] = {23, 22, 21, 20, 19, 18, 17, 16, 15, 14,  // 24–15 links hoch
+                         13, 12, 11, 10,                          // 14–11 Diagonale runter
+                         0,  1,  2,  3,  4,  5,  6,  7,  8,  9};  // 1–10 rechts hoch
+const uint8_t PEN_R[] = {23, 22, 21, 20, 19, 18, 17, 16, 15, 14,  // 24–15 links hoch
+                         11, 10,                                  // 12, 11 oben
+                         9,  8,  7,  6,  5,  4,  3,  2,  1,  0,   // 10–1 rechts runter
+                         13, 12};                                 // 14, 13 Mitte
+const uint8_t PEN_A[] = {25, 24, 23, 22, 21, 20, 19, 18, 17, 16,  // 24–15 links hoch
+                         13, 12, 11, 10,                          // 12.6, 12.5, 12, 11 oben
+                         9,  8,  7,  6,  5,  4,  3,  2,  1,  0,   // 10–1 rechts runter
+                         15, 14};                                 // 14, 13 Mitte
+const uint8_t PEN_T[] = {13, 12, 9, 10, 11,           // 14, 13, 10, 11, 12 Balken
+                         8,  7,  6, 5,  4, 3, 2, 1, 0};  // 9–1 Stamm runter
+
+struct PenOrder {
+  const uint8_t* seq;  // nullptr = Kettenreihenfolge
+  uint8_t len;
+};
+
+const PenOrder PEN[NUM_LETTERS] = {
+    {PEN_M, sizeof(PEN_M)}, {nullptr, 0}, {PEN_N, sizeof(PEN_N)}, {nullptr, 0}, {nullptr, 0},
+    {PEN_R, sizeof(PEN_R)}, {PEN_A, sizeof(PEN_A)}, {nullptr, 0}, {PEN_T, sizeof(PEN_T)},
+};
+
+void buildPenOrder() {
+  uint16_t k = 0;
+  for (uint8_t l = 0; l < NUM_LETTERS; l++) {
+    const LetterInfo& info = letters[l];
+    for (uint16_t r = 0; r < info.count; r++) {
+      const uint16_t local = (PEN[l].seq && r < PEN[l].len) ? PEN[l].seq[r] : r;
+      const uint16_t i = info.first + local;
+      rank[i] = static_cast<uint8_t>(r);
+      order[k++] = static_cast<uint8_t>(i);
+    }
+  }
+}
+
 }  // namespace
 
 namespace layout {
@@ -178,6 +222,7 @@ void build() {
     const float a = atan2f(dy, dx);  // -pi..pi
     ang[i] = static_cast<uint8_t>(static_cast<int>(lroundf((a + static_cast<float>(M_PI)) / (2 * static_cast<float>(M_PI)) * 256)) & 0xFF);
   }
+  buildPenOrder();
 }
 
 const LedPos& pos(uint16_t i) { return leds[i]; }
@@ -187,5 +232,7 @@ uint8_t nx(uint16_t i) { return normX[i]; }
 uint8_t ny(uint16_t i) { return normY[i]; }
 float radius(uint16_t i) { return rad[i]; }
 uint8_t angle(uint16_t i) { return ang[i]; }
+uint8_t penRank(uint16_t i) { return rank[i]; }
+uint16_t penOrder(uint16_t k) { return order[k]; }
 
 }  // namespace layout
