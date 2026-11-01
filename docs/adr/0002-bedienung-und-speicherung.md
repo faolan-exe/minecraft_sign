@@ -31,7 +31,7 @@ Speicherung (NVS-Flash über Preferences):
 WLAN:
 
 - Ohne gespeicherte Zugangsdaten startet ein offener Access Point `Minecraft-Sign-XXXX` mit Captive Portal.
-- Klappt die Verbindung beim Start 20 s lang nicht oder bricht sie im Betrieb für 60 s ab, kommt der Access Point dazu. Alle 30 s wird erneut verbunden, solange niemand im Setup-Netz ist.
+- Klappt die Verbindung beim Start 20 s lang nicht oder bricht sie im Betrieb für 60 s ab, kommt der Access Point dazu. Solange er läuft, sucht der ESP nicht dauerhaft nach dem gespeicherten Netz, weil die Suche über alle Kanäle springt und den Access Point mitnimmt: Auto-Reconnect ist aus. Alle 3 min gibt es einen Versuch von höchstens 15 s, aber nur, wenn seit 3 min kein Gerät im Setup-Netz war.
 - Ändert sich die SSID ohne neues Passwort, wird das alte Passwort gelöscht. Gleiches gilt für den MQTT-Server.
 
 ## Verworfene Alternativen

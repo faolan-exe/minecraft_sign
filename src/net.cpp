@@ -10,7 +10,9 @@ namespace {
 
 constexpr uint32_t CONNECT_TIMEOUT_MS = 20000;   // so lange beim Start warten, dann AP
 constexpr uint32_t LOST_TIMEOUT_MS = 60000;      // Verbindung verloren → AP dazuschalten
-constexpr uint32_t RETRY_INTERVAL_MS = 30000;    // im AP-Modus erneut versuchen
+constexpr uint32_t RETRY_INTERVAL_MS = 180000;   // im AP-Modus erneut versuchen …
+constexpr uint32_t RETRY_WINDOW_MS = 15000;      // … und so lange suchen lassen
+constexpr uint32_t CLIENT_QUIET_MS = 180000;     // so lange nach dem letzten Setup-Client nicht suchen
 const IPAddress AP_IP(192, 168, 4, 1);
 
 DNSServer dns;
@@ -23,12 +25,33 @@ bool ap = false;
 bool servicesStarted = false;
 uint32_t disconnectedSince = 0;
 uint32_t lastRetry = 0;
+uint32_t lastClientSeen = 0;
+bool retrying = false;
+
+void applyTxPower() {
+#ifdef WIFI_LOW_TX_POWER
+  // Manche C3-Boards (z. B. SuperMini) haben eine schwache Antennenanpassung und
+  // funktionieren mit voller Sendeleistung schlechter
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+#endif
+}
+
+// Laufenden Verbindungsversuch abbrechen: Die Suche springt über alle Kanäle und
+// nimmt den Access Point mit, dann kommt kein Handy hinein.
+void stopStaSearch() {
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false);
+  retrying = false;
+}
 
 void startAp() {
   if (ap) return;
-  WiFi.mode(hasCredentials ? WIFI_AP_STA : WIFI_AP);
+  stopStaSearch();
+  // STA-Teil bleibt an, damit die WLAN-Suche in der Oberfläche funktioniert
+  WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(AP_IP, AP_IP, IPAddress(255, 255, 255, 0));
   WiFi.softAP(apName);
+  applyTxPower();
   // Alle Namen auf uns auflösen, damit Handys die Anmeldeseite öffnen
   dns.setErrorReplyCode(DNSReplyCode::NoError);
   dns.start(53, "*", AP_IP);
@@ -41,6 +64,7 @@ void stopAp() {
   dns.stop();
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   ap = false;
   Serial.println("[net] Access Point aus");
 }
@@ -77,6 +101,7 @@ void begin(const Settings& s) {
     return;
   }
   WiFi.mode(WIFI_STA);
+  applyTxPower();
   WiFi.begin(ssid, pass);
   disconnectedSince = millis();
   Serial.printf("[net] verbinde mit \"%s\"\n", ssid);
@@ -84,13 +109,17 @@ void begin(const Settings& s) {
 
 void loop() {
   const uint32_t now = millis();
-  if (ap) dns.processNextRequest();
+  if (ap) {
+    dns.processNextRequest();
+    if (WiFi.softAPgetStationNum() > 0) lastClientSeen = now;
+  }
   if (servicesStarted) ArduinoOTA.handle();
   if (!hasCredentials) return;
 
   if (WiFi.status() == WL_CONNECTED) {
     if (disconnectedSince) Serial.printf("[net] verbunden, IP %s\n", WiFi.localIP().toString().c_str());
     disconnectedSince = 0;
+    retrying = false;
     startServices();
     // Setup-Netz abschalten, sobald niemand mehr daran hängt
     if (ap && WiFi.softAPgetStationNum() == 0) stopAp();
@@ -104,9 +133,18 @@ void loop() {
     startServices();
     lastRetry = now;
   }
-  // Neuer Versuch nur, wenn gerade niemand im Setup-Netz ist (Kanalwechsel stört)
-  if (ap && now - lastRetry > RETRY_INTERVAL_MS && WiFi.softAPgetStationNum() == 0) {
+  if (!ap) return;
+  if (retrying) {
+    // Suche erfolglos oder jemand will ins Setup-Netz: abbrechen
+    if (now - lastRetry > RETRY_WINDOW_MS || WiFi.softAPgetStationNum() > 0) stopStaSearch();
+    return;
+  }
+  // Neuer Versuch nur selten und nur, wenn länger niemand im Setup-Netz war
+  const bool quiet = lastClientSeen == 0 || now - lastClientSeen > CLIENT_QUIET_MS;
+  if (now - lastRetry > RETRY_INTERVAL_MS && quiet && WiFi.softAPgetStationNum() == 0) {
     lastRetry = now;
+    retrying = true;
+    Serial.printf("[net] neuer Versuch mit \"%s\"\n", ssid);
     WiFi.begin(ssid, pass);
   }
 }
