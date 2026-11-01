@@ -17,7 +17,8 @@ constexpr uint8_t MAX_COLUMNS = 64;
 int16_t px[NUM_LEDS];
 int16_t py[NUM_LEDS];
 uint8_t radius16[NUM_LEDS];  // Abstand zur Mitte in 1/4 LED-Abstand
-uint8_t localPos[NUM_LEDS];  // Position innerhalb des Buchstabens, 0..255
+uint8_t localPos[NUM_LEDS];  // Position in Schreibreihenfolge innerhalb des Buchstabens, 0..255
+uint8_t readPos[NUM_LEDS];   // Position in Leserichtung über das ganze Schild
 int16_t columns[MAX_COLUMNS];
 uint8_t numColumns = 0;
 int16_t widthPx = 0;
@@ -54,7 +55,7 @@ void solid(CRGB* leds, const FxParams& p) { fill_solid(leds, NUM_LEDS, p.color1)
 void gradient(CRGB* leds, const FxParams& p) {
   const uint8_t shift = p.intensity ? static_cast<uint8_t>((vt / 24) * p.intensity / 255) : 0;
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    leds[i] = blend(p.color1, p.color2, triwave8((layout::nx(i) >> 1) + shift));
+    leds[i] = blend(p.color1, p.color2, triwave8((layout::nx(i) >> 1) - shift));
   }
 }
 
@@ -139,7 +140,7 @@ void letterChase(CRGB* leds, const FxParams& p) {
   }
 }
 
-// Ein Komet läuft entlang der Verkabelung jedes Buchstabens und zeichnet ihn nach
+// Ein Komet zeichnet jeden Buchstaben in Schreibreihenfolge nach
 void trace(CRGB* leds, const FxParams& p) {
   const uint8_t head = vt / 8;
   const uint8_t tail = 16 + scale8(p.intensity, 200);
@@ -155,9 +156,7 @@ void theater(CRGB* leds, const FxParams& p) {
   const uint8_t spacing = 3 + p.intensity / 64;
   const uint32_t offset = vt / 120;
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const LetterInfo& l = layout::letter(layout::pos(i).letter);
-    const uint32_t local = i - l.first;
-    leds[i] = ((local + offset) % spacing == 0) ? p.color1 : p.color2;
+    leds[i] = ((layout::penRank(i) + spacing - offset % spacing) % spacing == 0) ? p.color1 : p.color2;
   }
 }
 
@@ -290,11 +289,11 @@ void enchanted(CRGB* leds, const FxParams& p) {
   const uint8_t width = 20 + p.intensity / 3;
   const CRGB glint(170, 90, 255);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    // Zwei Glanzstreifen in unterschiedlichen Winkeln, wie bei verzauberten Gegenständen
+    // Zwei Glanzstreifen in unterschiedlichen Winkeln, beide nach rechts, wie bei verzauberten Gegenständen
     const uint16_t d1 = layout::nx(i) * 2 + layout::ny(i);
     const uint16_t d2 = layout::nx(i) * 2 - layout::ny(i) + 255;
     const uint8_t a = static_cast<uint8_t>(d1 - vt / 5);
-    const uint8_t b = static_cast<uint8_t>(d2 + vt / 7);
+    const uint8_t b = static_cast<uint8_t>(d2 - vt / 7);
     uint8_t v = 0;
     if (a < width) v = qadd8(v, sin8(a * 128 / width));
     if (b < width) v = qadd8(v, scale8(sin8(b * 128 / width), 180));
@@ -302,13 +301,14 @@ void enchanted(CRGB* leds, const FxParams& p) {
   }
 }
 
-// Ein Signal läuft wie über Redstone-Staub durch die gesamte Kette
+// Ein Signal läuft wie über Redstone-Staub in Leserichtung durch alle Buchstaben
 void redstone(CRGB* leds, const FxParams& p) {
   const uint16_t len = 8 + p.intensity / 6;
   const uint16_t head = (vt / 20) % (NUM_LEDS + len);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     uint8_t v = 35 + scale8(inoise8(i * 60, vt / 3), 25);
-    if (i <= head && head - i < len) v = qadd8(v, 255 - (head - i) * 200 / len);
+    const uint16_t pos = readPos[i];
+    if (pos <= head && head - pos < len) v = qadd8(v, 255 - (head - pos) * 200 / len);
     leds[i] = CRGB(v, v > 200 ? (v - 200) : 0, 0);
   }
 }
@@ -392,12 +392,13 @@ void init() {
     py[i] = static_cast<int16_t>(lp.y * 16);
     radius16[i] = static_cast<uint8_t>(layout::radius(i) * 4);
     const LetterInfo& l = layout::letter(lp.letter);
-    localPos[i] = static_cast<uint8_t>((i - l.first) * 255 / (l.count - 1));
+    localPos[i] = static_cast<uint8_t>(layout::penRank(i) * 255 / (l.count - 1));
     // Spalten für Matrix sammeln
     bool known = false;
     for (uint8_t c = 0; c < numColumns; c++) known |= abs(columns[c] - px[i]) < 4;
     if (!known && numColumns < MAX_COLUMNS) columns[numColumns++] = px[i];
   }
+  for (uint16_t k = 0; k < NUM_LEDS; k++) readPos[layout::penOrder(k)] = static_cast<uint8_t>(k);
   widthPx = static_cast<int16_t>(layout::width() * 16);
 }
 

@@ -10,7 +10,7 @@ Die LEDs des Schilds sind buchstabenweise in einer Kette verdrahtet, innerhalb e
 ## Entscheidung
 
 - Eigene Firmware mit PlatformIO und Arduino-Framework.
-- **Koordinatentabelle** (`src/layout.cpp`): Jede LED bekommt x/y in LED-Abständen und ihren Buchstaben, Buchstabe für Buchstabe aus `layout.txt` abgeschrieben. Effekte rechnen räumlich (x, y, Winkel, Radius) oder entlang der Verdrahtung pro Buchstabe, wo das gewollt ist („Nachzeichnen“, „Redstone“).
+- **Koordinatentabelle** (`src/layout.cpp`): Jede LED bekommt x/y in LED-Abständen und ihren Buchstaben, Buchstabe für Buchstabe aus `layout.txt` abgeschrieben. Effekte rechnen räumlich (x, y, Winkel, Radius) oder in **Schreibreihenfolge**: pro Buchstabe die LEDs so sortiert, wie man ihn mit dem Stift von links nach rechts schreibt (bei M, N, R, A und T entgegen der Kette). Kein Effekt folgt direkt der Verkabelung; alles Bewegte läuft in Leserichtung.
 - **FastLED** für Ausgabe, Farb-Mathe, Rauschen, Paletten und Strombegrenzung.
 - **ESPAsyncWebServer** für Weboberfläche und JSON-API; die Seite ist in die Firmware eingebettet, damit sie auch im Setup-Netz ohne Internet funktioniert.
 - **PubSubClient** für MQTT in einem eigenen FreeRTOS-Task, damit ein hängender Verbindungsaufbau die Animation nicht anhält.

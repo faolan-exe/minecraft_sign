@@ -87,6 +87,54 @@ void test_normalised_extremes() {
   TEST_ASSERT_EQUAL_UINT8(255, maxY);
 }
 
+// Schreibreihenfolge: Permutation je Buchstabe, Buchstaben nacheinander
+void test_pen_order_is_permutation_per_letter() {
+  bool seen[NUM_LEDS] = {};
+  uint16_t k = 0;
+  for (uint8_t l = 0; l < NUM_LETTERS; l++) {
+    const LetterInfo& info = layout::letter(l);
+    for (uint16_t r = 0; r < info.count; r++, k++) {
+      const uint16_t i = layout::penOrder(k);
+      TEST_ASSERT_EQUAL_UINT8(l, layout::pos(i).letter);
+      TEST_ASSERT_EQUAL_UINT8(r, layout::penRank(i));
+      TEST_ASSERT_FALSE_MESSAGE(seen[i], "LED doppelt in der Schreibreihenfolge");
+      seen[i] = true;
+    }
+  }
+  TEST_ASSERT_EQUAL_UINT16(NUM_LEDS, k);
+}
+
+// Jeder Buchstabe beginnt am linken Rand und endet rechts der Mitte oder in der Mitte
+void test_pen_order_goes_left_to_right() {
+  for (uint8_t l = 0; l < NUM_LETTERS; l++) {
+    const LetterInfo& info = layout::letter(l);
+    uint16_t first = 0, last = 0;
+    for (uint16_t i = info.first; i < info.first + info.count; i++) {
+      if (layout::penRank(i) == 0) first = i;
+      if (layout::penRank(i) == info.count - 1) last = i;
+    }
+    TEST_ASSERT_EQUAL_FLOAT(info.x0, layout::pos(first).x);
+    TEST_ASSERT_TRUE_MESSAGE(layout::pos(last).x >= (info.x0 + info.x1) / 2, "Schreibreihenfolge endet links");
+  }
+}
+
+// Stichproben aus layout.txt
+void test_pen_order_samples() {
+  // M: erst LED 26 (links unten), zuletzt LED 1 (rechts unten)
+  TEST_ASSERT_EQUAL_UINT16(25, layout::penOrder(0));
+  TEST_ASSERT_EQUAL_UINT16(0, layout::penOrder(25));
+  // T: erst LED 14 (Balken links), dann 13, 10, 11, 12, dann Stamm von oben
+  const LetterInfo& t = layout::letter(8);
+  const uint16_t tStart = NUM_LEDS - t.count;
+  TEST_ASSERT_EQUAL_UINT16(t.first + 13, layout::penOrder(tStart));
+  TEST_ASSERT_EQUAL_UINT16(t.first + 9, layout::penOrder(tStart + 2));
+  TEST_ASSERT_EQUAL_UINT16(t.first + 8, layout::penOrder(tStart + 5));
+  // E: Kettenreihenfolge
+  const LetterInfo& e = layout::letter(3);
+  TEST_ASSERT_EQUAL_UINT8(0, layout::penRank(e.first));
+  TEST_ASSERT_EQUAL_UINT8(21, layout::penRank(e.first + 21));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_letters_match_layout_txt);
@@ -96,5 +144,8 @@ int main() {
   RUN_TEST(test_no_two_leds_share_a_position);
   RUN_TEST(test_first_led_positions);
   RUN_TEST(test_normalised_extremes);
+  RUN_TEST(test_pen_order_is_permutation_per_letter);
+  RUN_TEST(test_pen_order_goes_left_to_right);
+  RUN_TEST(test_pen_order_samples);
   return UNITY_END();
 }

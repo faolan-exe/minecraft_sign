@@ -40,4 +40,11 @@ float radius(uint16_t i);
 // Winkel um die Schildmitte, 0..255
 uint8_t angle(uint16_t i);
 
+// Schreibreihenfolge: so, wie man den Buchstaben mit dem Stift von links nach
+// rechts schreibt (die Kette läuft bei M, N, R, A und T von rechts).
+// penRank: Rang der LED innerhalb ihres Buchstabens, 0 = erster Strich links
+uint8_t penRank(uint16_t i);
+// penOrder: k-te LED in Leserichtung über das ganze Schild (k = 0 … NUM_LEDS-1)
+uint16_t penOrder(uint16_t k);
+
 }  // namespace layout
