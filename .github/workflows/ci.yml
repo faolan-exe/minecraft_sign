@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ hashFiles('platformio.ini') }}
+      - name: PlatformIO installieren
+        run: pip install platformio
+      - name: Unit-Tests
+        run: pio test -e native
+      - name: Lint
+        run: pio check -e esp32c3 --fail-on-defect=high
+      - name: Firmware bauen
+        run: pio run -e esp32c3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: .pio/build/esp32c3/firmware.bin
